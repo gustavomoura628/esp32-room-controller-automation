@@ -1,0 +1,14 @@
+[Unit]
+Description=ESP32 Room Controller Automation Server
+After=network.target
+
+[Service]
+Type=simple
+User=YOUR_USER
+WorkingDirectory=/path/to/esp32-room-controller-automation
+ExecStart=/path/to/esp32-room-controller-automation/venv/bin/python server.py
+Restart=on-failure
+RestartSec=5
+
+[Install]
+WantedBy=multi-user.target

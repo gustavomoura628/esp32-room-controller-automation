@@ -1,0 +1,402 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Room Automation</title>
+<style>
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body { font-family: sans-serif; max-width: 800px; margin: 40px auto; padding: 0 20px;
+         background: #1a1a1a; color: #e0e0e0; }
+  h1 { font-size: 1.4em; margin-bottom: 16px; }
+  h2 { font-size: 1.1em; margin-bottom: 12px; color: #aaa; }
+
+  .card { background: #2a2a2a; border: 1px solid #3a3a3a; border-radius: 8px;
+          padding: 16px; margin-bottom: 12px; }
+
+  button { padding: 8px 16px; font-size: 0.9em; cursor: pointer;
+           background: #3b82f6; color: #fff; border: none; border-radius: 6px; }
+  button:active { background: #2563eb; }
+  button.danger { background: #ef4444; }
+  button.danger:active { background: #dc2626; }
+  button.secondary { background: #4a4a4a; }
+  button.secondary:active { background: #5a5a5a; }
+  button.success { background: #22c55e; }
+  button.success:active { background: #16a34a; }
+  button:disabled { opacity: 0.5; cursor: not-allowed; }
+
+  input, select { background: #1a1a1a; color: #e0e0e0; border: 1px solid #3a3a3a;
+                  border-radius: 6px; padding: 8px 12px; font-size: 0.9em; }
+  input:focus, select:focus { outline: none; border-color: #3b82f6; }
+  input[type="time"] { width: 130px; }
+  input[type="text"] { width: 100%; }
+  input[type="color"] { width: 40px; height: 36px; padding: 2px; cursor: pointer; border-radius: 6px; }
+  input[type="range"] { width: 100%; accent-color: #3b82f6; }
+
+  label { font-size: 0.85em; color: #aaa; display: block; margin-bottom: 4px; }
+  .form-row { display: flex; gap: 12px; align-items: end; margin-bottom: 12px; flex-wrap: wrap; }
+  .form-group { display: flex; flex-direction: column; }
+  .form-group.grow { flex: 1; min-width: 150px; }
+
+  .days-row { display: flex; gap: 4px; flex-wrap: wrap; }
+  .day-btn { width: 38px; height: 32px; font-size: 0.8em; padding: 0; text-align: center;
+             background: #1a1a1a; border: 1px solid #3a3a3a; color: #aaa; border-radius: 6px;
+             cursor: pointer; }
+  .day-btn.active { background: #3b82f6; border-color: #3b82f6; color: #fff; }
+
+  .toggle-row { display: flex; gap: 16px; align-items: center; flex-wrap: wrap; }
+  .toggle { display: flex; align-items: center; gap: 6px; cursor: pointer; font-size: 0.9em; }
+  .toggle input[type="checkbox"] { accent-color: #3b82f6; width: 16px; height: 16px; }
+
+  .schedule-header { display: flex; justify-content: space-between; align-items: center;
+                     margin-bottom: 6px; }
+  .schedule-header h3 { font-size: 1em; }
+  .schedule-meta { font-size: 0.85em; color: #aaa; margin-bottom: 8px; }
+  .schedule-actions { display: flex; gap: 6px; }
+
+  .strip-opts { margin-top: 8px; padding: 10px; background: #1a1a1a; border-radius: 6px; }
+  .strip-opts .form-row { margin-bottom: 6px; }
+  .strip-opts .form-row:last-child { margin-bottom: 0; }
+  .bri-label { font-size: 0.85em; color: #aaa; min-width: 30px; text-align: right; }
+
+  .settings-row { display: flex; gap: 8px; align-items: end; }
+  .settings-row input { flex: 1; }
+
+  .test-row { display: flex; gap: 8px; margin-top: 16px; }
+
+  .tag { display: inline-block; font-size: 0.75em; padding: 2px 8px; border-radius: 4px;
+         margin-right: 4px; }
+  .tag-on { background: #166534; color: #22c55e; }
+  .tag-off { background: #7f1d1d; color: #ef4444; }
+  .tag-relay { background: #1e3a5f; color: #60a5fa; }
+  .tag-strip { background: #3b1f6e; color: #a78bfa; }
+  .tag-disabled { background: #3a3a3a; color: #888; }
+
+  .empty { text-align: center; color: #666; padding: 32px; }
+
+  .status-msg { font-size: 0.85em; margin-top: 8px; padding: 8px; border-radius: 6px;
+                display: none; }
+  .status-msg.ok { display: block; background: #14532d; color: #22c55e; }
+  .status-msg.err { display: block; background: #7f1d1d; color: #ef4444; }
+
+  @media (max-width: 500px) {
+    .form-row { flex-direction: column; }
+    .settings-row { flex-direction: column; }
+    .settings-row input { width: 100%; }
+  }
+</style>
+</head>
+<body>
+
+<h1>Room Automation</h1>
+
+<!-- Settings -->
+<div class="card">
+  <h2>Settings</h2>
+  <div class="settings-row">
+    <div class="form-group grow">
+      <label>ESP32 URL</label>
+      <input type="text" id="esp32url" placeholder="http://192.168.1.100">
+    </div>
+    <button onclick="saveConfig()">Save</button>
+  </div>
+  <div id="configStatus" class="status-msg"></div>
+
+  <div class="test-row">
+    <button class="success" onclick="testAction('on')">Test On</button>
+    <button class="danger" onclick="testAction('off')">Test Off</button>
+  </div>
+</div>
+
+<!-- Add / Edit form -->
+<div class="card" id="formCard">
+  <h2 id="formTitle">Add Schedule</h2>
+  <input type="hidden" id="editId">
+
+  <div class="form-row">
+    <div class="form-group grow">
+      <label>Name</label>
+      <input type="text" id="fname" placeholder="Morning wake up">
+    </div>
+    <div class="form-group">
+      <label>Time</label>
+      <input type="time" id="ftime" value="07:00">
+    </div>
+    <div class="form-group">
+      <label>Action</label>
+      <select id="faction">
+        <option value="on">Turn On</option>
+        <option value="off">Turn Off</option>
+      </select>
+    </div>
+  </div>
+
+  <div class="form-row">
+    <div class="form-group">
+      <label>Days</label>
+      <div class="days-row" id="fdays">
+        <div class="day-btn active" data-day="0">Mon</div>
+        <div class="day-btn active" data-day="1">Tue</div>
+        <div class="day-btn active" data-day="2">Wed</div>
+        <div class="day-btn active" data-day="3">Thu</div>
+        <div class="day-btn active" data-day="4">Fri</div>
+        <div class="day-btn active" data-day="5">Sat</div>
+        <div class="day-btn active" data-day="6">Sun</div>
+      </div>
+    </div>
+  </div>
+
+  <div class="form-row">
+    <div class="toggle-row">
+      <label class="toggle"><input type="checkbox" id="frelay" checked> Relay (room light)</label>
+      <label class="toggle"><input type="checkbox" id="fstrip" checked onchange="updateStripOpts()"> LED Strip</label>
+    </div>
+  </div>
+
+  <div class="strip-opts" id="stripOpts">
+    <div class="form-row" style="align-items:center">
+      <div class="form-group">
+        <label>Color</label>
+        <input type="color" id="fcolor" value="#ffffff">
+      </div>
+      <div class="form-group grow">
+        <label>Brightness</label>
+        <div style="display:flex;gap:8px;align-items:center">
+          <input type="range" id="fbri" min="1" max="255" value="255" oninput="updateBriLabel()">
+          <span class="bri-label" id="briLabel">255</span>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <div class="form-row" style="margin-top:12px">
+    <button onclick="saveSchedule()">Save Schedule</button>
+    <button class="secondary" onclick="resetForm()" id="cancelBtn" style="display:none">Cancel</button>
+  </div>
+</div>
+
+<!-- Schedule list -->
+<h2>Schedules</h2>
+<div id="scheduleList"></div>
+
+<script>
+var DAY_LABELS = ['Mon','Tue','Wed','Thu','Fri','Sat','Sun'];
+
+// --- Config ---
+function loadConfig() {
+  fetch('/api/config').then(function(r){return r.json()}).then(function(d) {
+    document.getElementById('esp32url').value = d.esp32_url || '';
+  });
+}
+
+function saveConfig() {
+  var url = document.getElementById('esp32url').value.replace(/\/+$/, '');
+  fetch('/api/config', {
+    method: 'POST',
+    headers: {'Content-Type': 'application/json'},
+    body: JSON.stringify({esp32_url: url})
+  }).then(function(r){return r.json()}).then(function() {
+    showStatus('configStatus', 'Saved', false);
+  }).catch(function() {
+    showStatus('configStatus', 'Save failed', true);
+  });
+}
+
+function testAction(action) {
+  fetch('/api/test/' + action, {
+    method: 'POST',
+    headers: {'Content-Type': 'application/json'},
+    body: JSON.stringify({})
+  }).then(function(r){return r.json()}).then(function(d) {
+    if (d.error) {
+      showStatus('configStatus', d.error, true);
+    } else {
+      showStatus('configStatus', 'Test ' + action + ' sent', false);
+    }
+  }).catch(function() {
+    showStatus('configStatus', 'Request failed', true);
+  });
+}
+
+function showStatus(id, msg, isError) {
+  var el = document.getElementById(id);
+  el.textContent = msg;
+  el.className = 'status-msg ' + (isError ? 'err' : 'ok');
+  setTimeout(function() { el.className = 'status-msg'; }, 3000);
+}
+
+// --- Days ---
+document.getElementById('fdays').addEventListener('click', function(e) {
+  if (e.target.classList.contains('day-btn')) {
+    e.target.classList.toggle('active');
+  }
+});
+
+function getSelectedDays() {
+  var btns = document.querySelectorAll('#fdays .day-btn.active');
+  var days = [];
+  btns.forEach(function(b) { days.push(b.getAttribute('data-day')); });
+  return days.join(',');
+}
+
+function setSelectedDays(daysStr) {
+  var days = daysStr.split(',');
+  document.querySelectorAll('#fdays .day-btn').forEach(function(b) {
+    if (days.indexOf(b.getAttribute('data-day')) >= 0) {
+      b.classList.add('active');
+    } else {
+      b.classList.remove('active');
+    }
+  });
+}
+
+// --- Strip options ---
+function updateStripOpts() {
+  var show = document.getElementById('fstrip').checked && document.getElementById('faction').value === 'on';
+  document.getElementById('stripOpts').style.display = show ? 'block' : 'none';
+}
+
+function updateBriLabel() {
+  document.getElementById('briLabel').textContent = document.getElementById('fbri').value;
+}
+
+document.getElementById('faction').addEventListener('change', updateStripOpts);
+
+// --- Form ---
+function resetForm() {
+  document.getElementById('editId').value = '';
+  document.getElementById('fname').value = '';
+  document.getElementById('ftime').value = '07:00';
+  document.getElementById('faction').value = 'on';
+  document.getElementById('frelay').checked = true;
+  document.getElementById('fstrip').checked = true;
+  document.getElementById('fcolor').value = '#ffffff';
+  document.getElementById('fbri').value = 255;
+  document.getElementById('briLabel').textContent = '255';
+  setSelectedDays('0,1,2,3,4,5,6');
+  document.getElementById('formTitle').textContent = 'Add Schedule';
+  document.getElementById('cancelBtn').style.display = 'none';
+  updateStripOpts();
+}
+
+function editSchedule(s) {
+  document.getElementById('editId').value = s.id;
+  document.getElementById('fname').value = s.name;
+  document.getElementById('ftime').value = s.time;
+  document.getElementById('faction').value = s.action;
+  document.getElementById('frelay').checked = !!s.relay;
+  document.getElementById('fstrip').checked = !!s.strip;
+  document.getElementById('fcolor').value = s.color;
+  document.getElementById('fbri').value = s.brightness;
+  document.getElementById('briLabel').textContent = s.brightness;
+  setSelectedDays(s.days);
+  document.getElementById('formTitle').textContent = 'Edit Schedule';
+  document.getElementById('cancelBtn').style.display = '';
+  updateStripOpts();
+  document.getElementById('formCard').scrollIntoView({behavior: 'smooth'});
+}
+
+function saveSchedule() {
+  var id = document.getElementById('editId').value;
+  var data = {
+    name: document.getElementById('fname').value || 'Untitled',
+    time: document.getElementById('ftime').value,
+    days: getSelectedDays() || '0,1,2,3,4,5,6',
+    action: document.getElementById('faction').value,
+    relay: document.getElementById('frelay').checked ? 1 : 0,
+    strip: document.getElementById('fstrip').checked ? 1 : 0,
+    brightness: parseInt(document.getElementById('fbri').value),
+    color: document.getElementById('fcolor').value,
+    enabled: 1
+  };
+
+  var url = id ? '/api/schedules/' + id : '/api/schedules';
+  var method = id ? 'PUT' : 'POST';
+
+  fetch(url, {
+    method: method,
+    headers: {'Content-Type': 'application/json'},
+    body: JSON.stringify(data)
+  }).then(function(r){return r.json()}).then(function() {
+    resetForm();
+    loadSchedules();
+  });
+}
+
+function deleteSchedule(id) {
+  if (!confirm('Delete this schedule?')) return;
+  fetch('/api/schedules/' + id, {method: 'DELETE'}).then(function() {
+    loadSchedules();
+  });
+}
+
+function toggleEnabled(s) {
+  s.enabled = s.enabled ? 0 : 1;
+  fetch('/api/schedules/' + s.id, {
+    method: 'PUT',
+    headers: {'Content-Type': 'application/json'},
+    body: JSON.stringify(s)
+  }).then(function() { loadSchedules(); });
+}
+
+// --- Render ---
+function formatDays(daysStr) {
+  var days = daysStr.split(',');
+  if (days.length === 7) return 'Every day';
+  if (days.length === 5 && days.join(',') === '0,1,2,3,4') return 'Weekdays';
+  if (days.length === 2 && days.join(',') === '5,6') return 'Weekends';
+  return days.map(function(d) { return DAY_LABELS[parseInt(d)]; }).join(', ');
+}
+
+function renderSchedules(schedules) {
+  var list = document.getElementById('scheduleList');
+  if (schedules.length === 0) {
+    list.innerHTML = '<div class="card empty">No schedules yet</div>';
+    return;
+  }
+  var html = '';
+  schedules.forEach(function(s) {
+    var tags = '';
+    tags += '<span class="tag ' + (s.action === 'on' ? 'tag-on' : 'tag-off') + '">' + s.action.toUpperCase() + '</span>';
+    if (s.relay) tags += '<span class="tag tag-relay">Relay</span>';
+    if (s.strip) tags += '<span class="tag tag-strip">Strip</span>';
+    if (!s.enabled) tags += '<span class="tag tag-disabled">Paused</span>';
+
+    var stripInfo = '';
+    if (s.strip && s.action === 'on') {
+      stripInfo = ' <span style="color:#666;font-size:0.85em">bri:' + s.brightness +
+        ' <span style="display:inline-block;width:10px;height:10px;border-radius:2px;background:' +
+        s.color + ';vertical-align:middle"></span></span>';
+    }
+
+    html += '<div class="card" style="' + (s.enabled ? '' : 'opacity:0.6') + '">';
+    html += '<div class="schedule-header">';
+    html += '<h3>' + escHtml(s.name) + '</h3>';
+    html += '<div class="schedule-actions">';
+    html += '<button class="secondary" style="font-size:0.8em;padding:4px 10px" onclick=\'toggleEnabled(' + JSON.stringify(s) + ')\'>' + (s.enabled ? 'Pause' : 'Enable') + '</button>';
+    html += '<button class="secondary" style="font-size:0.8em;padding:4px 10px" onclick=\'editSchedule(' + JSON.stringify(s) + ')\'>Edit</button>';
+    html += '<button class="danger" style="font-size:0.8em;padding:4px 10px" onclick="deleteSchedule(' + s.id + ')">Delete</button>';
+    html += '</div></div>';
+    html += '<div class="schedule-meta">' + s.time + ' &middot; ' + formatDays(s.days) + stripInfo + '</div>';
+    html += '<div>' + tags + '</div>';
+    html += '</div>';
+  });
+  list.innerHTML = html;
+}
+
+function escHtml(s) {
+  var d = document.createElement('div');
+  d.textContent = s;
+  return d.innerHTML;
+}
+
+function loadSchedules() {
+  fetch('/api/schedules').then(function(r){return r.json()}).then(renderSchedules);
+}
+
+// --- Init ---
+loadConfig();
+loadSchedules();
+updateStripOpts();
+</script>
+</body>
+</html>
